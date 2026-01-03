@@ -1,94 +1,173 @@
-// UPDATED invoice.html script section
-// Replace your existing getUrlParams() and populateInvoice() functions with these:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+    .loading { text-align: center; padding: 50px; }
+    .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; 
+                border-radius: 50%; width: 40px; height: 40px; 
+                animation: spin 1s linear infinite; margin: 0 auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .invoice { background: white; max-width: 800px; margin: 20px auto; padding: 40px; 
+               box-shadow: 0 0 10px rgba(0,0,0,0.1); display: none; }
+    .invoice.show { display: block; }
+    .header { text-align: center; margin-bottom: 30px; }
+    .info { display: flex; justify-content: space-between; margin-bottom: 20px; }
+    .info div { flex: 1; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #f8f9fa; }
+    .total { text-align: right; margin-top: 20px; }
+    .error { color: red; background: #ffebee; padding: 20px; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>Loading invoice data...</p>
+  </div>
 
-function getInvoiceData() {
-  // First, try to get data from localStorage
-  const savedData = localStorage.getItem('invoiceData');
-  
-  if (savedData) {
-    console.log('✅ Data loaded from localStorage');
-    const data = JSON.parse(savedData);
-    localStorage.removeItem('invoiceData'); // Clean up
-    return data;
-  }
-  
-  // Fallback: Try URL parameters (backward compatibility)
-  console.log('⚠️ No localStorage data, trying URL parameters');
-  const params = new URLSearchParams(window.location.search);
-  const data = {};
-  for (const [key, value] of params) {
-    data[key] = decodeURIComponent(value);
-  }
-  return data;
-}
+  <div class="invoice" id="invoice">
+    <div class="header">
+      <h1>TAX INVOICE</h1>
+    </div>
+    
+    <div class="info">
+      <div>
+        <p><strong>Customer:</strong> <span id="customer_name"></span></p>
+        <p><strong>Address:</strong> <span id="address"></span></p>
+        <p><strong>Phone:</strong> <span id="phone"></span></p>
+      </div>
+      <div>
+        <p><strong>Invoice No:</strong> <span id="invoice_no"></span></p>
+        <p><strong>Date:</strong> <span id="date"></span></p>
+      </div>
+    </div>
 
-function populateInvoice() {
-  const data = getInvoiceData(); // Changed from getUrlParams()
-  
-  console.log('Invoice Data:', data); // For debugging
-  
-  // Simple fields
-  const fields = [
-    'customer_name_kh', 'customer_name', 'address_kh', 'address',
-    'phone', 'vat_tin', 'invoice_no', 'date', 'measurement', 'lot_no', 
-    'flight_date', 'factory_name', 'declaration', 'vessel', 'port', 
-    'cargo_type', 'container', 'hbl', 'etd', 'qty', 'invpl', 
-    'subtotal', 'vat_amount', 'grand_total', 'grand_total_khr', 
-    'exchange_rate', 'remarks'
-  ];
-  
-  fields.forEach(field => {
-    const el = document.getElementById(field);
-    if (el && data[field]) {
-      if (field === 'remarks') {
-        el.innerHTML = data[field].replace(/\n/g, '<br>');
-      } else {
-        el.textContent = data[field];
+    <table>
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Description</th>
+          <th>Quantity</th>
+          <th>Rate</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody id="items"></tbody>
+    </table>
+
+    <div class="total">
+      <p><strong>Subtotal:</strong> $<span id="subtotal"></span></p>
+      <p><strong>VAT (10%):</strong> $<span id="vat"></span></p>
+      <p><strong>Grand Total:</strong> $<span id="total"></span></p>
+    </div>
+  </div>
+
+  <script>
+    var CONFIG = {
+      appId: 'ddb15479-c0c5-4a08-98a6-0dc3995a73fb',
+      apiKey: 'V2-HaSMe-yGwUl-vfRdr-NbCff-fXPHV-Hg3sM-gOGz4-n1eQp',
+      tableName: 'Invoice'
+    };
+
+    function getParam(name) {
+      var params = new URLSearchParams(window.location.search);
+      return params.get(name);
+    }
+
+    function showError(msg) {
+      document.getElementById('loading').innerHTML = 
+        '<div class="error"><h2>Error</h2><p>' + msg + '</p></div>';
+    }
+
+    function setText(id, value) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = value || '';
+    }
+
+    function loadInvoice(data) {
+      setText('customer_name', data.customer_name);
+      setText('address', data.address);
+      setText('phone', data.phone);
+      setText('invoice_no', data.invoice_no);
+      setText('date', data.date);
+      setText('subtotal', data.subtotal);
+      setText('vat', data.vat_amount);
+      setText('total', data.grand_total);
+
+      var tbody = document.getElementById('items');
+      tbody.innerHTML = '';
+      
+      if (data.items) {
+        var items = typeof data.items === 'string' ? JSON.parse(data.items) : data.items;
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          var row = tbody.insertRow();
+          row.innerHTML = '<td>' + (i + 1) + '</td>' +
+            '<td>' + (item.description || '') + '</td>' +
+            '<td>' + (item.qty || '') + '</td>' +
+            '<td>' + (item.rate || '') + '</td>' +
+            '<td>' + (item.amount || '') + '</td>';
+        }
+      }
+
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('invoice').classList.add('show');
+    }
+
+    async function fetchData(id) {
+      var url = 'https://api.appsheet.com/api/v2/apps/' + CONFIG.appId + 
+                '/tables/' + CONFIG.tableName + '/Action';
+      
+      var response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'ApplicationAccessKey': CONFIG.apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          Action: 'Find',
+          Properties: {
+            Locale: 'en-US',
+            Selector: 'Filter(' + CONFIG.tableName + ', [Invoice No] = "' + id + '")'
+          },
+          Rows: []
+        })
+      });
+
+      if (!response.ok) throw new Error('API request failed');
+      
+      var result = await response.json();
+      if (!result || result.length === 0) throw new Error('Invoice not found');
+      
+      return result[0];
+    }
+
+    async function init() {
+      var id = getParam('id');
+      if (!id) {
+        showError('No invoice ID provided. Use: ?id=YOUR_INVOICE_ID');
+        return;
+      }
+
+      if (CONFIG.appId === 'YOUR_APP_ID') {
+        showError('Please configure API credentials in the script');
+        return;
+      }
+
+      try {
+        var data = await fetchData(id);
+        loadInvoice(data);
+      } catch (err) {
+        showError(err.message);
       }
     }
-  });
 
-  // Handle line items
-  const tbody = document.getElementById('items_tbody');
-  tbody.innerHTML = '';
-  
-  if (data.items) {
-    try {
-      const items = JSON.parse(data.items);
-      items.forEach((item, index) => {
-        addItemRow(index + 1, item);
-      });
-    } catch (e) {
-      console.error('Error parsing items:', e);
-    }
-  } else {
-    // Single item fallback
-    const item = {
-      no: data.no || '1',
-      item_name: data.item_name || '',
-      item_name_kh: data.item_name_kh || '',
-      remarks: data.item_remarks || '',
-      qty: data.item_qty || '',
-      rate: data.rate || '',
-      amount: data.amount || ''
-    };
-    addItemRow(item.no, item);
-  }
-}
-
-function addItemRow(no, item) {
-  const tbody = document.getElementById('items_tbody');
-  const row = tbody.insertRow();
-  
-  row.innerHTML = `
-    <td style="text-align: center;">${no}</td>
-    <td>${item.item_name} ${item.item_name_kh || ''}</td>
-    <td>${item.remarks || ''}</td>
-    <td style="text-align: center;">${item.qty || ''}</td>
-    <td class="right">${item.rate || ''}</td>
-    <td class="right">${item.amount || ''}</td>
-  `;
-}
-
-// Load data when page loads
-window.onload = populateInvoice;
+    window.onload = init;
+  </script>
+</body>
+</html>
