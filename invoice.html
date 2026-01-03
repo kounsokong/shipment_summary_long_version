@@ -1,0 +1,94 @@
+// UPDATED invoice.html script section
+// Replace your existing getUrlParams() and populateInvoice() functions with these:
+
+function getInvoiceData() {
+  // First, try to get data from localStorage
+  const savedData = localStorage.getItem('invoiceData');
+  
+  if (savedData) {
+    console.log('✅ Data loaded from localStorage');
+    const data = JSON.parse(savedData);
+    localStorage.removeItem('invoiceData'); // Clean up
+    return data;
+  }
+  
+  // Fallback: Try URL parameters (backward compatibility)
+  console.log('⚠️ No localStorage data, trying URL parameters');
+  const params = new URLSearchParams(window.location.search);
+  const data = {};
+  for (const [key, value] of params) {
+    data[key] = decodeURIComponent(value);
+  }
+  return data;
+}
+
+function populateInvoice() {
+  const data = getInvoiceData(); // Changed from getUrlParams()
+  
+  console.log('Invoice Data:', data); // For debugging
+  
+  // Simple fields
+  const fields = [
+    'customer_name_kh', 'customer_name', 'address_kh', 'address',
+    'phone', 'vat_tin', 'invoice_no', 'date', 'measurement', 'lot_no', 
+    'flight_date', 'factory_name', 'declaration', 'vessel', 'port', 
+    'cargo_type', 'container', 'hbl', 'etd', 'qty', 'invpl', 
+    'subtotal', 'vat_amount', 'grand_total', 'grand_total_khr', 
+    'exchange_rate', 'remarks'
+  ];
+  
+  fields.forEach(field => {
+    const el = document.getElementById(field);
+    if (el && data[field]) {
+      if (field === 'remarks') {
+        el.innerHTML = data[field].replace(/\n/g, '<br>');
+      } else {
+        el.textContent = data[field];
+      }
+    }
+  });
+
+  // Handle line items
+  const tbody = document.getElementById('items_tbody');
+  tbody.innerHTML = '';
+  
+  if (data.items) {
+    try {
+      const items = JSON.parse(data.items);
+      items.forEach((item, index) => {
+        addItemRow(index + 1, item);
+      });
+    } catch (e) {
+      console.error('Error parsing items:', e);
+    }
+  } else {
+    // Single item fallback
+    const item = {
+      no: data.no || '1',
+      item_name: data.item_name || '',
+      item_name_kh: data.item_name_kh || '',
+      remarks: data.item_remarks || '',
+      qty: data.item_qty || '',
+      rate: data.rate || '',
+      amount: data.amount || ''
+    };
+    addItemRow(item.no, item);
+  }
+}
+
+function addItemRow(no, item) {
+  const tbody = document.getElementById('items_tbody');
+  const row = tbody.insertRow();
+  
+  row.innerHTML = `
+    <td style="text-align: center;">${no}</td>
+    <td>${item.item_name} ${item.item_name_kh || ''}</td>
+    <td>${item.remarks || ''}</td>
+    <td style="text-align: center;">${item.qty || ''}</td>
+    <td class="right">${item.rate || ''}</td>
+    <td class="right">${item.amount || ''}</td>
+  `;
+}
+
+// Load data when page loads
+window.onload = populateInvoice;
